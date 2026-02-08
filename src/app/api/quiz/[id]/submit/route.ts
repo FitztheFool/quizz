@@ -4,18 +4,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
-/**
- * Type du contexte de la route dynamique
- */
-type RouteContext = {
-  params: {
-    id: string;
-  };
-};
-
 export async function POST(
   req: NextRequest,
-  context: RouteContext
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -28,7 +19,7 @@ export async function POST(
     }
 
     const { answers } = await req.json();
-    const quizId = context.params.id;
+    const quizId = params.id;  // ✅ Corrigé ici
     const userId = session.user.id;
 
     // 1. Récupérer le quiz avec toutes les questions et réponses
