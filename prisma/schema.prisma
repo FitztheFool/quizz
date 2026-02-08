@@ -1,0 +1,108 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum QuestionType {
+  TRUE_FALSE
+  MCQ
+  TEXT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  createdQuizzes Quiz[]
+  scores         Score[]
+
+  @@map("users")
+}
+
+model Quiz {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  creatorId String
+  creator   User   @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  questions Question[]
+  scores    Score[]
+
+  @@index([creatorId])
+  @@index([isPublic])
+  @@map("quizzes")
+}
+
+model Question {
+  id        String       @id @default(cuid())
+  type      QuestionType
+  content   String       @db.Text
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  // Relations
+  quizId  String
+  quiz    Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers Answer[]
+
+  @@index([quizId])
+  @@map("questions")
+}
+
+model Answer {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  isCorrect Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("answers")
+}
+
+model Score {
+  id          String   @id @default(cuid())
+  totalScore  Int
+  completedAt DateTime @default(now())
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  quizId String
+  quiz   Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  // Contrainte UNIQUE : un utilisateur ne peut scorer qu'une fois par quiz
+  @@unique([userId, quizId])
+  @@index([userId])
+  @@index([quizId])
+  @@index([totalScore])
+  @@map("scores")
+}
