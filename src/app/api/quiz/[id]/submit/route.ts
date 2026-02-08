@@ -4,22 +4,31 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
+/**
+ * Type du contexte de la route dynamique
+ */
+type RouteContext = {
+  params: {
+    id: string;
+  };
+};
+
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: RouteContext
 ) {
   try {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
       return NextResponse.json(
-        { error: 'Non authentifié' },
+        { error: "Non authentifié" },
         { status: 401 }
       );
     }
 
     const { answers } = await req.json();
-    const quizId = params.id;
+    const quizId = context.params.id;
     const userId = session.user.id;
 
     // 1. Récupérer le quiz avec toutes les questions et réponses
@@ -36,18 +45,17 @@ export async function POST(
 
     if (!quiz) {
       return NextResponse.json(
-        { error: 'Quiz introuvable' },
+        { error: "Quiz introuvable" },
         { status: 404 }
       );
     }
 
     // 2. Vérifier si l'utilisateur est le créateur (pas de points)
     if (quiz.creatorId === userId) {
-      // Calculer le score pour affichage mais ne pas l'enregistrer
       const calculatedScore = calculateScore(quiz, answers);
-      
+
       return NextResponse.json({
-        message: 'Les créateurs ne gagnent pas de points sur leurs propres quiz',
+        message: "Les créateurs ne gagnent pas de points sur leurs propres quiz",
         score: calculatedScore,
         canReplay: true,
         isCreator: true,
@@ -68,9 +76,8 @@ export async function POST(
     const totalScore = calculateScore(quiz, answers);
 
     if (existingScore) {
-      // Peut rejouer mais ne gagne pas de points supplémentaires
       return NextResponse.json({
-        message: 'Vous avez déjà complété ce quiz',
+        message: "Vous avez déjà complété ce quiz",
         score: totalScore,
         previousScore: existingScore.totalScore,
         canReplay: true,
@@ -88,15 +95,15 @@ export async function POST(
     });
 
     return NextResponse.json({
-      message: 'Score enregistré avec succès !',
+      message: "Score enregistré avec succès !",
       score: totalScore,
       canReplay: true,
       isFirstAttempt: true,
     });
   } catch (error) {
-    console.error('Erreur lors de la soumission du quiz:', error);
+    console.error("Erreur lors de la soumission du quiz:", error);
     return NextResponse.json(
-      { error: 'Erreur serveur' },
+      { error: "Erreur serveur" },
       { status: 500 }
     );
   }
