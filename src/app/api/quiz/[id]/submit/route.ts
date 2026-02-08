@@ -6,9 +6,10 @@ import prisma from '@/lib/prisma';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;  // ✅ LIGNE CRITIQUE
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -19,7 +20,7 @@ export async function POST(
     }
 
     const { answers } = await req.json();
-    const quizId = params.id;  // ✅ Corrigé ici
+    const quizId = id;  // ✅ Utilise id directement
     const userId = session.user.id;
 
     // 1. Récupérer le quiz avec toutes les questions et réponses
