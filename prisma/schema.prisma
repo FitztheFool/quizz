@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -32,6 +30,7 @@ model User {
   // Relations
   createdQuizzes Quiz[]
   scores         Score[]
+  attempts       Attempt[]
 
   @@map("users")
 }
@@ -50,6 +49,7 @@ model Quiz {
 
   questions Question[]
   scores    Score[]
+  attempts  Attempt[]
 
   @@index([creatorId])
   @@index([isPublic])
@@ -87,6 +87,21 @@ model Answer {
   @@map("answers")
 }
 
+model Attempt {
+  id        String   @id @default(cuid())
+  score     Int
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  quizId String
+  quiz   Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([userId, quizId])
+  @@map("attempts")
+}
+
 model Score {
   id          String   @id @default(cuid())
   totalScore  Int
@@ -99,7 +114,6 @@ model Score {
   quizId String
   quiz   Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
-  // Contrainte UNIQUE : un utilisateur ne peut scorer qu'une fois par quiz
   @@unique([userId, quizId])
   @@index([userId])
   @@index([quizId])

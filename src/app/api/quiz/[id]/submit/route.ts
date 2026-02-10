@@ -1,32 +1,49 @@
-// src/app/api/quiz/[id]/submit/route.ts
+// 📄 Fichier : src/app/api/quiz/[id]/submit/route.ts
+// Route API pour soumettre les réponses d'un quiz
+
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+
+interface UserAnswer {
+  questionId: string;
+  answerId?: string;
+  freeText?: string;
+}
 
 export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;  // ✅ LIGNE CRITIQUE
-    const session = await getServerSession(authOptions);
+    // Récupérer la session utilisateur
+    const session = await getServerSession();
 
-    if (!session?.user?.id) {
+    if (!session || !session.user) {
       return NextResponse.json(
-        { error: "Non authentifié" },
+        { error: 'Non authentifié' },
         { status: 401 }
       );
     }
 
-    const { answers } = await req.json();
-    const quizId = id;  // ✅ Utilise id directement
-    const userId = session.user.id;
+    const quizId = params.id;
+    const body = await request.json();
+    const { answers } = body as { answers: UserAnswer[] };
 
-    // 1. Récupérer le quiz avec toutes les questions et réponses
+    if (!answers || !Array.isArray(answers)) {
+      return NextResponse.json(
+        { error: 'Données invalides' },
+        { status: 400 }
+      );
+    }
+
+    // Récupérer le quiz avec les bonnes réponses
     const quiz = await prisma.quiz.findUnique({
       where: { id: quizId },
       include: {
+        createdBy: {
+          select: { id: true },
+        },
         questions: {
           include: {
             answers: true,
@@ -37,98 +54,96 @@ export async function POST(
 
     if (!quiz) {
       return NextResponse.json(
-        { error: "Quiz introuvable" },
+        { error: 'Quiz non trouvé' },
         { status: 404 }
       );
     }
 
-    // 2. Vérifier si l'utilisateur est le créateur (pas de points)
-    if (quiz.creatorId === userId) {
-      const calculatedScore = calculateScore(quiz, answers);
+    // Calculer le score
+    let totalScore = 0;
+    let totalPoints = 0;
 
-      return NextResponse.json({
-        message: "Les créateurs ne gagnent pas de points sur leurs propres quiz",
-        score: calculatedScore,
-        canReplay: true,
-        isCreator: true,
-      });
+    for (const question of quiz.questions) {
+      totalPoints += question.points;
+      const userAnswer = answers.find((a) => a.questionId === question.id);
+
+      if (!userAnswer) {
+        continue;
+      }
+
+      let isCorrect = false;
+
+      // Vérifier selon le type de question
+      if (question.type === 'TRUE_FALSE' || question.type === 'MULTIPLE_CHOICE') {
+        if (userAnswer.answerId) {
+          const selectedAnswer = question.answers.find(
+            (a) => a.id === userAnswer.answerId
+          );
+          isCorrect = selectedAnswer?.isCorrect || false;
+        }
+      } else if (question.type === 'FREE_TEXT') {
+        const correctAnswer = question.answers.find((a) => a.isCorrect);
+        if (correctAnswer && userAnswer.freeText) {
+          // Comparaison simple (ignorer casse et espaces)
+          const userText = userAnswer.freeText.trim().toLowerCase();
+          const correctText = correctAnswer.text.trim().toLowerCase();
+          isCorrect = userText === correctText;
+        }
+      }
+
+      if (isCorrect) {
+        totalScore += question.points;
+      }
     }
 
-    // 3. Vérifier si l'utilisateur a déjà complété ce quiz
-    const existingScore = await prisma.score.findUnique({
-      where: {
-        userId_quizId: {
-          userId,
-          quizId,
+    // Vérifier si l'utilisateur est le créateur
+    const isCreator = session.user.id === quiz.createdBy.id;
+
+    // Enregistrer le score seulement si pas le créateur
+    if (!isCreator) {
+      // Chercher un score existant
+      const existingScore = await prisma.score.findFirst({
+        where: {
+          userId: session.user.id,
+          quizId: quizId,
         },
-      },
-    });
-
-    // 4. Calculer le score
-    const totalScore = calculateScore(quiz, answers);
-
-    if (existingScore) {
-      return NextResponse.json({
-        message: "Vous avez déjà complété ce quiz",
-        score: totalScore,
-        previousScore: existingScore.totalScore,
-        canReplay: true,
-        alreadyCompleted: true,
       });
-    }
 
-    // 5. Enregistrer le score (première tentative uniquement)
-    await prisma.score.create({
-      data: {
-        userId,
-        quizId,
-        totalScore,
-      },
-    });
+      if (existingScore) {
+        // Mettre à jour si meilleur score
+        if (totalScore > existingScore.score) {
+          await prisma.score.update({
+            where: { id: existingScore.id },
+            data: {
+              score: totalScore,
+              completedAt: new Date(),
+            },
+          });
+        }
+      } else {
+        // Créer un nouveau score
+        await prisma.score.create({
+          data: {
+            userId: session.user.id,
+            quizId: quizId,
+            score: totalScore,
+            completedAt: new Date(),
+          },
+        });
+      }
+    }
 
     return NextResponse.json({
-      message: "Score enregistré avec succès !",
       score: totalScore,
-      canReplay: true,
-      isFirstAttempt: true,
+      totalPoints: totalPoints,
+      percentage: Math.round((totalScore / totalPoints) * 100),
+      isCreator: isCreator,
     });
   } catch (error) {
-    console.error("Erreur lors de la soumission du quiz:", error);
+    console.error('Erreur lors de la soumission:', error);
     return NextResponse.json(
-      { error: "Erreur serveur" },
+      { error: 'Erreur serveur' },
       { status: 500 }
     );
   }
-}
-
-// Fonction de calcul de score
-function calculateScore(quiz: any, answers: Record<string, string[]>) {
-  let totalScore = 0;
-
-  for (const question of quiz.questions) {
-    const userAnswerIds = answers[question.id] || [];
-    const correctAnswers = question.answers.filter((a: any) => a.isCorrect);
-    const correctAnswerIds = correctAnswers.map((a: any) => a.id);
-
-    // Vérifier si la réponse est correcte
-    const isCorrect =
-      userAnswerIds.length === correctAnswerIds.length &&
-      userAnswerIds.every((id: string) => correctAnswerIds.includes(id));
-
-    if (isCorrect) {
-      switch (question.type) {
-        case 'TRUE_FALSE':
-          totalScore += 1;
-          break;
-        case 'MCQ':
-          totalScore += 3;
-          break;
-        case 'TEXT':
-          totalScore += 5;
-          break;
-      }
-    }
-  }
-
-  return totalScore;
 }
