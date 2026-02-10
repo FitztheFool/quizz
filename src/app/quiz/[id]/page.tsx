@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 
 interface Answer {
@@ -12,7 +13,7 @@ interface Answer {
 interface Question {
   id: string;
   text: string;
-  type: 'TRUE_FALSE' | 'MULTIPLE_CHOICE' | 'FREE_TEXT';
+  type: 'TRUE_FALSE' | 'MCQ' | 'TEXT';
   points: number;
   answers?: Answer[];
 }
@@ -36,6 +37,8 @@ interface UserAnswer {
 
 export default function QuizPage() {
   const params = useParams();
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const quizId = params?.id as string;
 
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -49,17 +52,36 @@ export default function QuizPage() {
   const [score, setScore] = useState<number | null>(null);
   const [totalPoints, setTotalPoints] = useState<number | null>(null);
 
+  // Vérifier l'authentification
+useEffect(() => {
+  if (!quizId) return;
+  if (status === 'loading') return;
+  fetchQuiz();
+}, [quizId, status]);
+
   useEffect(() => {
-    if (quizId) {
+    if (quizId && status === 'authenticated') {
       fetchQuiz();
     }
-  }, [quizId]);
+  }, [quizId, status]);
 
   const fetchQuiz = async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/quiz/${quizId}`);
       
+      if (response.status === 401) {
+        // Non authentifié
+        router.push(`/auth/login?callbackUrl=/quiz/${quizId}`);
+        return;
+      }
+
+      if (response.status === 403) {
+        setError('Vous n\'avez pas accès à ce quiz privé');
+        setLoading(false);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('Erreur lors du chargement du quiz');
       }
@@ -85,7 +107,7 @@ export default function QuizPage() {
       questionId: currentQuestion.id,
     };
 
-    if (currentQuestion.type === 'FREE_TEXT') {
+    if (currentQuestion.type === 'TEXT') {
       answer.freeText = freeTextAnswer;
     } else {
       answer.answerId = selectedAnswer;
@@ -137,17 +159,25 @@ export default function QuizPage() {
     setTotalPoints(null);
   };
 
-  // Loading state
+  // Loading authentication
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+
+        <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 80px)' }}>
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mb-4"></div>
+            <p className="text-gray-600 text-lg">Vérification de l'authentification...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading quiz
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-            <Link href="/" className="text-3xl font-bold text-gray-900">
-              🎯 Quiz App
-            </Link>
-          </div>
-        </header>
 
         <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 80px)' }}>
           <div className="text-center">
@@ -163,13 +193,6 @@ export default function QuizPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-            <Link href="/" className="text-3xl font-bold text-gray-900">
-              🎯 Quiz App
-            </Link>
-          </div>
-        </header>
 
         <div className="max-w-2xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
           <div className="bg-white rounded-xl shadow-2xl p-8">
@@ -200,19 +223,6 @@ export default function QuizPage() {
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center">
-              <Link href="/" className="text-3xl font-bold text-gray-900">
-                🎯 Quiz App
-              </Link>
-              <Link href="/" className="text-gray-600 hover:text-gray-900">
-                ← Retour
-              </Link>
-            </div>
-          </div>
-        </header>
-
         <div className="max-w-2xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
           <div className="bg-white rounded-xl shadow-2xl p-8">
             <div className="text-center">
@@ -257,25 +267,12 @@ export default function QuizPage() {
   // Quiz playing screen
   const currentQuestion = quiz.questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / quiz.questions.length) * 100;
-  const canProceed = currentQuestion.type === 'FREE_TEXT' 
+  const canProceed = currentQuestion.type === 'TEXT' 
     ? freeTextAnswer.trim().length > 0 
     : selectedAnswer !== '';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <Link href="/" className="text-3xl font-bold text-gray-900">
-              🎯 Quiz App
-            </Link>
-            <Link href="/" className="text-gray-600 hover:text-gray-900">
-              ← Abandonner
-            </Link>
-          </div>
-        </div>
-      </header>
 
       <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Quiz Info */}
@@ -330,8 +327,8 @@ export default function QuizPage() {
             </div>
           )}
 
-          {/* MULTIPLE_CHOICE */}
-          {currentQuestion.type === 'MULTIPLE_CHOICE' && currentQuestion.answers && (
+          {/* MCQ */}
+          {currentQuestion.type === 'MCQ' && currentQuestion.answers && (
             <div className="space-y-3">
               {currentQuestion.answers.map((answer) => (
                 <button
@@ -349,8 +346,8 @@ export default function QuizPage() {
             </div>
           )}
 
-          {/* FREE_TEXT */}
-          {currentQuestion.type === 'FREE_TEXT' && (
+          {/* TEXT */}
+          {currentQuestion.type === 'TEXT' && (
             <div>
               <textarea
                 value={freeTextAnswer}

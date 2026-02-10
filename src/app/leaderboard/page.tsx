@@ -48,19 +48,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <Link href="/" className="text-3xl font-bold text-gray-900">
-              🎯 Quiz App
-            </Link>
-            <Link href="/" className="text-gray-600 hover:text-gray-900">
-              ← Retour
-            </Link>
-          </div>
-        </div>
-      </header>
+      
 
       <div className="max-w-4xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
         {/* Title */}

@@ -39,30 +39,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-gray-900">
-              🎯 Quiz App
-            </h1>
-            <div className="flex gap-4">
-              <Link
-                href="/login"
-                className="px-4 py-2 text-gray-700 hover:text-gray-900"
-              >
-                Connexion
-              </Link>
-              <Link
-                href="/register"
-                className="btn-primary"
-              >
-                S'inscrire
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
 
       {/* Hero Section */}
       <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">

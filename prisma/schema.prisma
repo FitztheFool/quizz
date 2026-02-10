@@ -60,6 +60,7 @@ model Question {
   id        String       @id @default(cuid())
   type      QuestionType
   content   String       @db.Text
+  points    Int          @default(1)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 

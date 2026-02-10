@@ -83,28 +83,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <Link href="/" className="text-3xl font-bold text-gray-900">
-              🎯 Quiz App
-            </Link>
-            <div className="flex items-center gap-4">
-              <span className="text-gray-700">
-                Bonjour, <span className="font-semibold">{session.user?.username}</span> 👋
-              </span>
-              <button
-                onClick={handleSignOut}
-                className="btn-secondary"
-              >
-                Déconnexion
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
       <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
         {/* Welcome Section */}
         <div className="mb-8">

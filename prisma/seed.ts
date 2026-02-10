@@ -8,6 +8,7 @@ async function main() {
 
   // Nettoyer la base
   await prisma.score.deleteMany();
+  await prisma.attempt.deleteMany();
   await prisma.answer.deleteMany();
   await prisma.question.deleteMany();
   await prisma.quiz.deleteMany();
@@ -41,10 +42,11 @@ async function main() {
       isPublic: true,
       questions: {
         create: [
-          // Question TRUE_FALSE
+          // Question TRUE_FALSE (1 point)
           {
             type: QuestionType.TRUE_FALSE,
             content: 'La Tour Eiffel mesure 330 mètres de hauteur.',
+            points: 1,
             answers: {
               create: [
                 { content: 'Vrai', isCorrect: true },
@@ -52,10 +54,11 @@ async function main() {
               ],
             },
           },
-          // Question MCQ
+          // Question MCQ (3 points)
           {
             type: QuestionType.MCQ,
             content: 'Quels sont les pays frontaliers de la France ?',
+            points: 3,
             answers: {
               create: [
                 { content: 'Espagne', isCorrect: true },
@@ -65,10 +68,11 @@ async function main() {
               ],
             },
           },
-          // Question TEXT
+          // Question TEXT (5 points)
           {
             type: QuestionType.TEXT,
             content: 'Quelle est la capitale de l\'Australie ?',
+            points: 5,
             answers: {
               create: [
                 { content: 'Canberra', isCorrect: true },
@@ -94,6 +98,7 @@ async function main() {
           {
             type: QuestionType.TRUE_FALSE,
             content: 'JavaScript est un langage typé statiquement.',
+            points: 1,
             answers: {
               create: [
                 { content: 'Vrai', isCorrect: false },
@@ -104,6 +109,7 @@ async function main() {
           {
             type: QuestionType.MCQ,
             content: 'Quelles sont des méthodes de tableau JavaScript ?',
+            points: 3,
             answers: {
               create: [
                 { content: 'map()', isCorrect: true },
@@ -125,7 +131,7 @@ async function main() {
     data: {
       userId: user2.id,
       quizId: quiz1.id,
-      totalScore: 9, // 1 + 3 + 5
+      totalScore: 9, // 1 + 3 + 5 = 9 points (score parfait)
     },
   });
 
@@ -133,7 +139,7 @@ async function main() {
     data: {
       userId: user1.id,
       quizId: quiz2.id,
-      totalScore: 4, // 1 + 3
+      totalScore: 4, // 1 + 3 = 4 points (score parfait)
     },
   });
 
@@ -142,8 +148,9 @@ async function main() {
   console.log('\n📊 Données créées:');
   console.log(`- 2 utilisateurs (alice/bob, mot de passe: password123)`);
   console.log(`- 2 quiz`);
-  console.log(`- 5 questions`);
-  console.log(`- 2 scores`);
+  console.log(`- Quiz 1: 3 questions (1+3+5 = 9 points max)`);
+  console.log(`- Quiz 2: 2 questions (1+3 = 4 points max)`);
+  console.log(`- 2 scores parfaits`);
 }
 
 main()
