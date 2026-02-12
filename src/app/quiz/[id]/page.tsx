@@ -71,8 +71,8 @@ useEffect(() => {
       const response = await fetch(`/api/quiz/${quizId}`);
       
       if (response.status === 401) {
-        // Non authentifié
-        router.push(`/auth/login?callbackUrl=/quiz/${quizId}`);
+        // Non authentifié - rediriger vers login avec callback URL
+        router.push(`/login?callbackUrl=${encodeURIComponent(`/quiz/${quizId}`)}`);
         return;
       }
 

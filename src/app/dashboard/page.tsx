@@ -32,7 +32,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.push('/login');
+      router.push('/login?callbackUrl=' + encodeURIComponent('/dashboard'));
     } else if (status === 'authenticated') {
       fetchData();
     }

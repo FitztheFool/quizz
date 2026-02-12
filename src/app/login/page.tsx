@@ -1,16 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [callbackUrl, setCallbackUrl] = useState<string>('/dashboard');
+
+  useEffect(() => {
+    // Récupérer l'URL de callback depuis les paramètres de recherche
+    const callback = searchParams.get('callbackUrl');
+    if (callback) {
+      setCallbackUrl(callback);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +37,8 @@ export default function LoginPage() {
       if (result?.error) {
         setError('Email ou mot de passe incorrect');
       } else {
-        router.push('/dashboard');
+        // Rediriger vers l'URL de callback ou le dashboard par défaut
+        router.push(callbackUrl);
         router.refresh();
       }
     } catch (err) {
@@ -53,6 +64,14 @@ export default function LoginPage() {
         {/* Login Form */}
         <div className="card">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Connexion</h2>
+
+          {callbackUrl !== '/dashboard' && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg">
+              <p className="text-sm">
+                🔒 Vous devez être connecté pour accéder à cette page
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg">
@@ -114,7 +133,10 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-gray-600">
               Pas encore de compte ?{' '}
-              <Link href="/register" className="text-primary-600 hover:text-primary-700 font-semibold">
+              <Link 
+                href={`/register${callbackUrl !== '/dashboard' ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''}`}
+                className="text-primary-600 hover:text-primary-700 font-semibold"
+              >
                 S'inscrire
               </Link>
             </p>

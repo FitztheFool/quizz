@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -14,6 +15,15 @@ export default function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [callbackUrl, setCallbackUrl] = useState<string>('/dashboard');
+
+  useEffect(() => {
+    // Récupérer l'URL de callback depuis les paramètres de recherche
+    const callback = searchParams.get('callbackUrl');
+    if (callback) {
+      setCallbackUrl(callback);
+    }
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -55,8 +65,11 @@ export default function RegisterPage() {
       if (!res.ok) {
         setError(data.error || 'Une erreur est survenue');
       } else {
-        // Rediriger vers la page de login
-        router.push('/login?registered=true');
+        // Rediriger vers la page de login avec le callback URL
+        const loginUrl = callbackUrl !== '/dashboard' 
+          ? `/login?registered=true&callbackUrl=${encodeURIComponent(callbackUrl)}`
+          : '/login?registered=true';
+        router.push(loginUrl);
       }
     } catch (err) {
       setError('Une erreur est survenue');
@@ -168,7 +181,10 @@ export default function RegisterPage() {
           <div className="mt-6 text-center">
             <p className="text-gray-600">
               Déjà un compte ?{' '}
-              <Link href="/login" className="text-primary-600 hover:text-primary-700 font-semibold">
+              <Link 
+                href={`/login${callbackUrl !== '/dashboard' ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''}`}
+                className="text-primary-600 hover:text-primary-700 font-semibold"
+              >
                 Se connecter
               </Link>
             </p>
