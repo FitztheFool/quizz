@@ -305,7 +305,7 @@ export default function QuizForm({
       }
 
       const saved = await res.json();
-      router.push(`/quiz/dashboard`);
+      router.push(`/dashboard`);
       router.refresh();
     } catch (e: any) {
       setError(e?.message ?? 'Erreur');
