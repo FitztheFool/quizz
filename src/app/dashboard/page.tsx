@@ -232,7 +232,7 @@ export default function DashboardPage() {
                         </Link>
                       </td>
                     </tr>
-                  ))}
+                  ))}   
                 </tbody>
               </table>
             </div>
