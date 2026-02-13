@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import QuizCard from '@/components/QuizCard';
 
 interface Quiz {
   id: string;
   title: string;
   description: string | null;
+  creatorId?: string;
   creator: {
     username: string;
   };
@@ -15,20 +18,39 @@ interface Quiz {
   };
 }
 
+interface UserScore {
+  quiz: {
+    id: string;
+  };
+  totalScore: number;
+}
+
 export default function HomePage() {
+  const { data: session } = useSession();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [myScores, setMyScores] = useState<UserScore[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchQuizzes();
-  }, []);
+    fetchData();
+  }, [session]);
 
-  const fetchQuizzes = async () => {
+  const fetchData = async () => {
     try {
+      // Récupérer les quiz
       const res = await fetch('/api/quiz');
       if (res.ok) {
         const data = await res.json();
         setQuizzes(data);
+      }
+
+      // Récupérer les scores de l'utilisateur si connecté
+      if (session) {
+        const scoresRes = await fetch('/api/user/scores');
+        if (scoresRes.ok) {
+          const scoresData = await scoresRes.json();
+          setMyScores(scoresData);
+        }
       }
     } catch (error) {
       console.error('Erreur:', error);
@@ -36,6 +58,8 @@ export default function HomePage() {
       setLoading(false);
     }
   };
+
+  const completedQuizIds = myScores.map((s) => s.quiz.id);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -93,26 +117,20 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {quizzes.map((quiz) => (
-              <div key={quiz.id} className="card hover:shadow-lg transition-shadow">
-                <h4 className="text-xl font-semibold text-gray-900 mb-2">
-                  {quiz.title}
-                </h4>
-                <p className="text-gray-600 mb-4 line-clamp-2">
-                  {quiz.description || 'Aucune description'}
-                </p>
-                <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                  <span>👤 {quiz.creator.username}</span>
-                  <span>📝 {quiz._count.questions} questions</span>
-                </div>
-                <Link
-                  href={`/quiz/${quiz.id}`}
-                  className="btn-primary w-full text-center"
-                >
-                  Jouer
-                </Link>
-              </div>
-            ))}
+            {quizzes.map((quiz) => {
+              const isCompleted = completedQuizIds.includes(quiz.id);
+              const score = myScores.find((s) => s.quiz.id === quiz.id);
+
+              return (
+                <QuizCard
+                  key={quiz.id}
+                  quiz={quiz}
+                  currentUserId={session?.user?.id}
+                  isCompleted={isCompleted}
+                  score={score?.totalScore}
+                />
+              );
+            })}
           </div>
         )}
       </div>

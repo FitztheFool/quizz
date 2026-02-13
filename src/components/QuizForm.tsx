@@ -1,22 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 type QuestionType = 'TRUE_FALSE' | 'MCQ' | 'TEXT';
 
 type AnswerForm = {
-  id?: string;        // présent en edit
+  id?: string;
+  tempId?: string;  // ✅ Ajouté
   text: string;
   isCorrect: boolean;
 };
 
 type QuestionForm = {
-  id?: string;        // présent en edit
+  id?: string;
+  tempId?: string;  // ✅ Ajouté
   text: string;
   type: QuestionType;
   points: number;
-  answers: AnswerForm[]; // pour TEXT: on stocke 1 answer attendu (isCorrect true)
+  answers: AnswerForm[];
 };
 
 type QuizFormState = {
@@ -27,37 +29,37 @@ type QuizFormState = {
   questions: QuestionForm[];
 };
 
-const uid = () => Math.random().toString(36).slice(2);
+// ✅ Générateur d'ID stable (pas de Math.random)
+let idCounter = 0;
+const generateId = () => `temp_${Date.now()}_${idCounter++}`;
 
 function defaultTrueFalseAnswers(): AnswerForm[] {
   return [
-    { text: 'Vrai', isCorrect: true },
-    { text: 'Faux', isCorrect: false },
+    { tempId: generateId(), text: 'Vrai', isCorrect: true },
+    { tempId: generateId(), text: 'Faux', isCorrect: false },
   ];
 }
 
 function defaultMcqAnswers(): AnswerForm[] {
   return [
-    { text: 'Réponse A', isCorrect: false },
-    { text: 'Réponse B', isCorrect: false },
+    { tempId: generateId(), text: 'Réponse A', isCorrect: false },
+    { tempId: generateId(), text: 'Réponse B', isCorrect: false },
   ];
 }
 
 function defaultTextAnswer(): AnswerForm[] {
-  return [{ text: '', isCorrect: true }];
+  return [{ tempId: generateId(), text: '', isCorrect: true }];
 }
 
 function normalizeQuestion(q: QuestionForm): QuestionForm {
   // Garantir des structures cohérentes selon le type
   if (q.type === 'TRUE_FALSE') {
     const a = q.answers?.length ? q.answers : defaultTrueFalseAnswers();
-    // forcer exactement 2 réponses
     const two = [
       { ...a[0], text: a[0]?.text ?? 'Vrai' },
       { ...a[1], text: a[1]?.text ?? 'Faux' },
     ].slice(0, 2);
 
-    // forcer une seule vraie
     const hasTrue = two.some((x) => x.isCorrect);
     if (!hasTrue) two[0].isCorrect = true;
     if (two.filter((x) => x.isCorrect).length > 1) {
@@ -70,7 +72,6 @@ function normalizeQuestion(q: QuestionForm): QuestionForm {
 
   if (q.type === 'TEXT') {
     const a = q.answers?.length ? q.answers : defaultTextAnswer();
-    // 1 seule "réponse attendue" (isCorrect true)
     const one = [{ ...a[0], isCorrect: true }];
     return { ...q, answers: one };
   }
@@ -100,35 +101,25 @@ export default function QuizForm({
       isPublic: initialData?.isPublic ?? true,
       questions:
         initialData?.questions?.length
-          ? (initialData.questions as QuestionForm[]).map(normalizeQuestion)
+          ? (initialData.questions as QuestionForm[]).map(q => ({
+              ...normalizeQuestion(q),
+              tempId: q.id || generateId()  // ✅ Utiliser id ou générer tempId
+            }))
           : [
-              normalizeQuestion({
-                text: 'Question 1',
-                type: 'MCQ',
-                points: 3,
-                answers: defaultMcqAnswers(),
-              }),
+              {
+                ...normalizeQuestion({
+                  text: 'Question 1',
+                  type: 'MCQ',
+                  points: 3,
+                  answers: defaultMcqAnswers(),
+                }),
+                tempId: generateId()  // ✅ ID stable
+              },
             ],
     };
 
     return base;
   });
-
-  useEffect(() => {
-    // re-normalize si initialData change (edit)
-    if (!initialData) return;
-    setForm((prev) => ({
-      ...prev,
-      id: initialData.id ?? prev.id,
-      title: initialData.title ?? prev.title,
-      description: initialData.description ?? prev.description,
-      isPublic: initialData.isPublic ?? prev.isPublic,
-      questions: (initialData.questions as QuestionForm[] | undefined)?.length
-        ? (initialData.questions as QuestionForm[]).map(normalizeQuestion)
-        : prev.questions,
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialData?.id]);
 
   const totalPoints = useMemo(
     () => form.questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0),
@@ -142,8 +133,15 @@ export default function QuizForm({
   function updateQuestion(index: number, patch: Partial<QuestionForm>) {
     setForm((prev) => {
       const next = [...prev.questions];
-      const merged = normalizeQuestion({ ...next[index], ...patch });
-      next[index] = merged;
+      const current = next[index];
+      
+      // Normaliser UNIQUEMENT si on change le type
+      if (patch.type && patch.type !== current.type) {
+        next[index] = normalizeQuestion({ ...current, ...patch });
+      } else {
+        next[index] = { ...current, ...patch };
+      }
+      
       return { ...prev, questions: next };
     });
   }
@@ -153,12 +151,15 @@ export default function QuizForm({
       ...prev,
       questions: [
         ...prev.questions,
-        normalizeQuestion({
-          text: `Question ${prev.questions.length + 1}`,
-          type: 'MCQ',
-          points: 3,
-          answers: defaultMcqAnswers(),
-        }),
+        {
+          ...normalizeQuestion({
+            text: `Question ${prev.questions.length + 1}`,
+            type: 'MCQ',
+            points: 3,
+            answers: defaultMcqAnswers(),
+          }),
+          tempId: generateId()  // ✅ ID stable
+        },
       ],
     }));
   }
@@ -175,13 +176,12 @@ export default function QuizForm({
       const next = [...prev.questions];
       const q = next[qIndex];
 
-      // pas d'ajout pour TRUE_FALSE / TEXT
       if (q.type !== 'MCQ') return prev;
 
-      next[qIndex] = normalizeQuestion({
+      next[qIndex] = {
         ...q,
-        answers: [...q.answers, { text: `Réponse ${q.answers.length + 1}`, isCorrect: false }],
-      });
+        answers: [...q.answers, { tempId: generateId(), text: `Réponse ${q.answers.length + 1}`, isCorrect: false }]
+      };
       return { ...prev, questions: next };
     });
   }
@@ -191,11 +191,11 @@ export default function QuizForm({
       const next = [...prev.questions];
       const q = next[qIndex];
       if (q.type !== 'MCQ') return prev;
-      if (q.answers.length <= 2) return prev; // garder au moins 2
-      next[qIndex] = normalizeQuestion({
+      if (q.answers.length <= 2) return prev;
+      next[qIndex] = {
         ...q,
-        answers: q.answers.filter((_, i) => i !== aIndex),
-      });
+        answers: q.answers.filter((_, i) => i !== aIndex)
+      };
       return { ...prev, questions: next };
     });
   }
@@ -207,14 +207,10 @@ export default function QuizForm({
 
       if (q.type === 'MCQ') {
         const answers = q.answers.map((a, i) => (i === aIndex ? { ...a, isCorrect: !a.isCorrect } : a));
-        next[qIndex] = normalizeQuestion({ ...q, answers });
+        next[qIndex] = { ...q, answers };
       } else if (q.type === 'TRUE_FALSE') {
-        // radio: une seule correcte
         const answers = q.answers.map((a, i) => ({ ...a, isCorrect: i === aIndex }));
-        next[qIndex] = normalizeQuestion({ ...q, answers });
-      } else if (q.type === 'TEXT') {
-        // TEXT: unique answer isCorrect true
-        next[qIndex] = normalizeQuestion(q);
+        next[qIndex] = { ...q, answers };
       }
 
       return { ...prev, questions: next };
@@ -226,8 +222,10 @@ export default function QuizForm({
       const next = [...prev.questions];
       const q = next[qIndex];
       if (q.type !== 'TEXT') return prev;
+      
       const answers = [{ ...q.answers[0], text: value, isCorrect: true }];
-      next[qIndex] = normalizeQuestion({ ...q, answers });
+      next[qIndex] = { ...q, answers };
+      
       return { ...prev, questions: next };
     });
   }
@@ -276,13 +274,13 @@ export default function QuizForm({
         description: form.description,
         isPublic: form.isPublic,
         questions: form.questions.map((q) => ({
-          id: q.id, // en edit seulement
+          id: q.id,
           text: q.text,
           type: q.type,
           points: q.points,
           answers: q.answers.map((a) => ({
-            id: a.id, // en edit seulement
-            text: a.text,
+            id: a.id,
+            content: a.text,
             isCorrect: a.isCorrect,
           })),
         })),
@@ -290,12 +288,12 @@ export default function QuizForm({
 
       const res =
         mode === 'create'
-          ? await fetch('/api/quizzes', {
+          ? await fetch('/api/quiz', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
             })
-          : await fetch(`/api/quizzes/${form.id}`, {
+          : await fetch(`/api/quiz/${form.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
@@ -303,12 +301,11 @@ export default function QuizForm({
 
       if (!res.ok) {
         const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? 'Erreur lors de l’enregistrement');
+        throw new Error(j?.error ?? 'Erreur lors de l\'enregistrement');
       }
 
       const saved = await res.json();
-      // redirige vers dashboard ou page quiz
-      router.push(`/quiz/${saved.id}`);
+      router.push(`/quiz/dashboard`);
       router.refresh();
     } catch (e: any) {
       setError(e?.message ?? 'Erreur');
@@ -366,7 +363,10 @@ export default function QuizForm({
       {/* Questions */}
       <div className="space-y-6">
         {form.questions.map((q, qi) => (
-          <div key={q.id ?? `q_${qi}_${uid()}`} className="bg-white rounded-xl shadow-lg p-6">
+          <div 
+            key={q.id || q.tempId}  // ✅ Clé stable
+            className="bg-white rounded-xl shadow-lg p-6"
+          >
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -454,10 +454,13 @@ export default function QuizForm({
               ) : (
                 <div className="space-y-3">
                   {q.answers.map((a, ai) => (
-                    <div key={a.id ?? `a_${qi}_${ai}`} className="flex items-center gap-3">
+                    <div 
+                      key={a.id || a.tempId}  // ✅ Clé stable
+                      className="flex items-center gap-3"
+                    >
                       <input
                         type={q.type === 'MCQ' ? 'checkbox' : 'radio'}
-                        name={q.type === 'TRUE_FALSE' ? `tf_${qi}` : undefined}
+                        name={q.type === 'TRUE_FALSE' ? `tf_${q.id || q.tempId}` : undefined}
                         checked={a.isCorrect}
                         onChange={() => toggleCorrect(qi, ai)}
                         className="h-5 w-5"
@@ -471,7 +474,7 @@ export default function QuizForm({
                         }}
                         className="flex-1 border rounded-lg p-3"
                         placeholder={`Réponse ${ai + 1}`}
-                        disabled={q.type === 'TRUE_FALSE'} // Vrai/Faux figé (tu peux enlever si tu veux)
+                        disabled={q.type === 'TRUE_FALSE'}
                       />
 
                       {q.type === 'MCQ' && (

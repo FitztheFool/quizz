@@ -5,10 +5,9 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }  // ✅ params est une Promise
 ) {
   try {
-    // 1️⃣ Vérifier l'authentification
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -18,9 +17,8 @@ export async function GET(
       );
     }
 
-    const quizId = params.id;
+    const { id: quizId } = await params;  // ✅ await params
 
-    // 2️⃣ Récupérer le quiz
     const quiz = await prisma.quiz.findUnique({
       where: { id: quizId },
       include: {
@@ -64,7 +62,6 @@ export async function GET(
       );
     }
 
-    // 3️⃣ Vérifier l'accès (quiz privé)
     if (!quiz.isPublic && quiz.creatorId !== session.user.id) {
       return NextResponse.json(
         { error: "Vous n'avez pas accès à ce quiz privé" },
@@ -72,45 +69,33 @@ export async function GET(
       );
     }
 
-    // 4️⃣ Formatter la réponse
     const formattedQuiz = {
       id: quiz.id,
       title: quiz.title,
       description: quiz.description || '',
-      createdBy: {
+      isPublic: quiz.isPublic,
+      creatorId: quiz.creatorId,
+      creator: {
         id: quiz.creator.id,
-        name: quiz.creator.username || quiz.creator.email,
+        username: quiz.creator.username || quiz.creator.email,
       },
       questions: quiz.questions.map((q) => {
-        // 🔍 DEBUG pour les questions TEXT
         if (q.type === 'TEXT') {
-          console.log('========================================');
-          console.log('🔍 TYPE:', q.type);
-          console.log('🔍 QUESTION (q.content):', q.content);
-          console.log('🔍 NOMBRE D\'ANSWERS:', q.answers.length);
-          console.log('🔍 TOUS LES ANSWERS:', JSON.stringify(q.answers, null, 2));
-          
           const correctAnswer = q.answers.find(a => a.isCorrect)?.content || q.answers[0]?.content;
-          console.log('🔍 RÉPONSE CORRECTE EXTRAITE:', correctAnswer);
-          console.log('========================================');
-          
           return {
             id: q.id,
             text: q.content,
             type: q.type,
             points: q.points,
-            correctAnswerText: correctAnswer,
-            answers: undefined,
+            answers: [{ id: q.answers[0]?.id, text: correctAnswer, isCorrect: true }],
           };
         }
         
-        // Pour TRUE_FALSE et MCQ
         return {
           id: q.id,
           text: q.content,
           type: q.type,
           points: q.points,
-          correctAnswerText: undefined,
           answers: q.answers.map((a) => ({
             id: a.id,
             text: a.content,
@@ -121,13 +106,164 @@ export async function GET(
       bestScore: quiz.scores[0]?.totalScore ?? null,
     };
 
-    console.log('📤 QUIZ FORMATÉ ENVOYÉ AU CLIENT:');
-    console.log(JSON.stringify(formattedQuiz, null, 2));
-
     return NextResponse.json(formattedQuiz, { status: 200 });
   } catch (error) {
     console.error('Erreur lors de la récupération du quiz:', error);
+    return NextResponse.json(
+      { error: 'Erreur serveur' },
+      { status: 500 }
+    );
+  }
+}
 
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }  // ✅ params est une Promise
+) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Non authentifié' },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;  // ✅ await params
+    const body = await request.json();
+    const { title, description, isPublic, questions } = body;
+
+    const existingQuiz = await prisma.quiz.findUnique({
+      where: { id },
+      select: { creatorId: true },
+    });
+
+    if (!existingQuiz) {
+      return NextResponse.json(
+        { error: 'Quiz non trouvé' },
+        { status: 404 }
+      );
+    }
+
+    if (existingQuiz.creatorId !== session.user.id) {
+      return NextResponse.json(
+        { error: 'Non autorisé' },
+        { status: 403 }
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.quiz.update({
+        where: { id },
+        data: {
+          title,
+          description,
+          isPublic,
+        },
+      });
+
+      await tx.answer.deleteMany({
+        where: {
+          question: {
+            quizId: id,
+          },
+        },
+      });
+
+      await tx.question.deleteMany({
+        where: {
+          quizId: id,
+        },
+      });
+
+      for (const q of questions) {
+        await tx.question.create({
+          data: {
+            content: q.text,
+            type: q.type,
+            points: q.points,
+            quizId: id,
+            answers: {
+              create: q.answers.map((a: any) => ({
+                content: a.content,
+                isCorrect: a.isCorrect,
+              })),
+            },
+          },
+        });
+      }
+    });
+
+    const fullQuiz = await prisma.quiz.findUnique({
+      where: { id },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+        questions: {
+          include: {
+            answers: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json(fullQuiz);
+  } catch (error) {
+    console.error('Erreur PUT quiz:', error);
+    return NextResponse.json(
+      { error: 'Erreur serveur' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }  // ✅ params est une Promise
+) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Non authentifié' },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;  // ✅ await params
+
+    const existingQuiz = await prisma.quiz.findUnique({
+      where: { id },
+      select: { creatorId: true },
+    });
+
+    if (!existingQuiz) {
+      return NextResponse.json(
+        { error: 'Quiz non trouvé' },
+        { status: 404 }
+      );
+    }
+
+    if (existingQuiz.creatorId !== session.user.id) {
+      return NextResponse.json(
+        { error: 'Non autorisé' },
+        { status: 403 }
+      );
+    }
+
+    await prisma.quiz.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Erreur DELETE quiz:', error);
     return NextResponse.json(
       { error: 'Erreur serveur' },
       { status: 500 }

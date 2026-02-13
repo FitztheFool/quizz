@@ -12,6 +12,7 @@ interface Quiz {
   _count: {
     questions: number;
   };
+  creatorId?: string;
 }
 
 interface UserScore {
@@ -23,12 +24,16 @@ interface UserScore {
   completedAt: string;
 }
 
+type TabType = 'available' | 'my-quizzes' | 'scores';
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [myQuizzes, setMyQuizzes] = useState<Quiz[]>([]);
   const [myScores, setMyScores] = useState<UserScore[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>('available');
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -40,11 +45,17 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     try {
-      // Récupérer les quiz disponibles
+      // Récupérer tous les quiz disponibles
       const quizzesRes = await fetch('/api/quiz');
       if (quizzesRes.ok) {
         const quizzesData = await quizzesRes.json();
         setQuizzes(quizzesData);
+        
+        // Filtrer les quiz créés par l'utilisateur
+        const userQuizzes = quizzesData.filter(
+          (quiz: Quiz) => quiz.creatorId === session?.user?.id
+        );
+        setMyQuizzes(userQuizzes);
       }
 
       // Récupérer les scores de l'utilisateur
@@ -60,16 +71,34 @@ export default function DashboardPage() {
     }
   };
 
-  const handleSignOut = () => {
-    signOut({ callbackUrl: '/' });
+  const handleDeleteQuiz = async (quizId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce quiz ?')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/quiz/${quizId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setMyQuizzes(myQuizzes.filter((q) => q.id !== quizId));
+        setQuizzes(quizzes.filter((q) => q.id !== quizId));
+      } else {
+        alert('Erreur lors de la suppression du quiz');
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      alert('Erreur lors de la suppression du quiz');
+    }
   };
 
   if (status === 'loading' || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-          <p className="mt-4 text-gray-600">Chargement...</p>
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
+          <p className="mt-4 text-gray-600 text-lg font-semibold">Chargement...</p>
         </div>
       </div>
     );
@@ -80,162 +109,273 @@ export default function DashboardPage() {
   }
 
   const totalScore = myScores.reduce((sum, score) => sum + score.totalScore, 0);
+  const completedQuizIds = myScores.map((s) => s.quiz.id);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
-            Tableau de bord
-          </h1>
-          <p className="text-xl text-gray-600">
-            Bienvenue dans votre espace personnel
-          </p>
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header avec profil */}
+        <div className="bg-white rounded-xl shadow-lg p-6 md:p-8 mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+                Plateforme de Quiz
+              </h1>
+              <p className="text-gray-600 text-lg">
+                Bienvenue, <span className="font-semibold">{session.user?.name || session.user?.email}</span>
+              </p>
+            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: '/' })}
+              className="px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
+            >
+              Se déconnecter
+            </button>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="text-sm opacity-90 mb-2">Score Total</div>
+              <div className="text-4xl font-bold">{totalScore}</div>
+              <div className="text-xs opacity-80 mt-1">points gagnés</div>
+            </div>
+            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="text-sm opacity-90 mb-2">Quiz Complétés</div>
+              <div className="text-4xl font-bold">{myScores.length}</div>
+              <div className="text-xs opacity-80 mt-1">sur {quizzes.length} disponibles</div>
+            </div>
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-lg">
+              <div className="text-sm opacity-90 mb-2">Mes Quiz Créés</div>
+              <div className="text-4xl font-bold">{myQuizzes.length}</div>
+              <div className="text-xs opacity-80 mt-1">quiz personnalisés</div>
+            </div>
+          </div>
+
+          {/* Tabs Navigation */}
+          <div className="mt-8 border-b-2 border-gray-200">
+            <div className="flex gap-6">
+              <button
+                onClick={() => setActiveTab('available')}
+                className={`pb-4 px-2 font-semibold text-base transition-colors border-b-4 ${
+                  activeTab === 'available'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Quiz disponibles
+              </button>
+              <button
+                onClick={() => setActiveTab('my-quizzes')}
+                className={`pb-4 px-2 font-semibold text-base transition-colors border-b-4 ${
+                  activeTab === 'my-quizzes'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Mes quiz
+              </button>
+              <button
+                onClick={() => setActiveTab('scores')}
+                className={`pb-4 px-2 font-semibold text-base transition-colors border-b-4 ${
+                  activeTab === 'scores'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Mes scores
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <div className="card">
-            <div className="text-sm text-gray-600 mb-1">Score Total</div>
-            <div className="text-3xl font-bold text-primary-600">{totalScore}</div>
-            <div className="text-xs text-gray-500 mt-1">points gagnés</div>
+        {/* Tab Content: Quiz Disponibles */}
+        {activeTab === 'available' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Quiz disponibles</h2>
+            </div>
+
+            {quizzes.length === 0 ? (
+              <div className="text-center py-16">
+                <p className="text-gray-600 text-lg mb-2">Aucun quiz disponible</p>
+                <p className="text-gray-500">Les quiz apparaîtront ici</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {quizzes.map((quiz) => {
+                  const isCompleted = completedQuizIds.includes(quiz.id);
+                  const score = myScores.find((s) => s.quiz.id === quiz.id);
+                  const isMyQuiz = quiz.creatorId === session?.user?.id;
+
+                  return (
+                    <div
+                      key={quiz.id}
+                      className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200 hover:border-blue-400 hover:shadow-xl transition-all relative"
+                    >
+                      <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
+                        {isMyQuiz && (
+                          <span className="bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md">
+                            👤 Créé par moi
+                          </span>
+                        )}
+                        {isCompleted && (
+                          <span className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md">
+                            ✓ Complété
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="text-xl font-bold text-gray-900 mb-3 pr-32">
+                        {quiz.title}
+                      </h3>
+                      <p className="text-gray-600 mb-4 text-sm line-clamp-2">
+                        {quiz.description || 'Aucune description'}
+                      </p>
+
+                      <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
+                        <span className="flex items-center gap-1">
+                          📝 {quiz._count.questions} questions
+                        </span>
+                        {score && (
+                          <span className="flex items-center gap-1 text-green-600 font-semibold">
+                            🏆 {score.totalScore} pts
+                          </span>
+                        )}
+                      </div>
+
+                      <Link
+                        href={`/quiz/${quiz.id}`}
+                        className={`block w-full text-center py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg ${
+                          isCompleted
+                            ? 'bg-green-500 hover:bg-green-600 text-white'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                      >
+                        {isCompleted ? 'Rejouer' : 'Jouer'}
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <div className="card">
-            <div className="text-sm text-gray-600 mb-1">Quiz Complétés</div>
-            <div className="text-3xl font-bold text-primary-600">{myScores.length}</div>
-            <div className="text-xs text-gray-500 mt-1">sur {quizzes.length} disponibles</div>
-          </div>
-          <div className="card">
-            <div className="text-sm text-gray-600 mb-1">Classement</div>
-            <div className="text-3xl font-bold text-primary-600">
-              <Link href="/leaderboard" className="hover:underline">
-                Voir →
+        )}
+
+        {/* Tab Content: Mes Quiz */}
+        {activeTab === 'my-quizzes' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Mes quiz</h2>
+              <Link
+                href="/quiz/create"
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+              >
+                <span className="text-xl">+</span> Créer un quiz
               </Link>
             </div>
-            <div className="text-xs text-gray-500 mt-1">classement global</div>
-          </div>
-        </div>
 
-        {/* Navigation Tabs */}
-        <div className="mb-6 border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            <button className="border-b-2 border-primary-600 py-4 px-1 text-sm font-medium text-primary-600">
-              Quiz disponibles
-            </button>
-            <button className="border-transparent py-4 px-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
-              Mes scores
-            </button>
-          </nav>
-        </div>
-
-        {/* Quiz List */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">Quiz disponibles</h2>
-            <Link href="/quiz/create" className="btn-primary">
-              + Créer un quiz
-            </Link>
-          </div>
-
-          {quizzes.length === 0 ? (
-            <div className="card text-center py-12">
-              <p className="text-gray-600 text-lg">Aucun quiz disponible.</p>
-              <p className="text-gray-500 mt-2">Créez le premier !</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {quizzes.map((quiz) => {
-                const completed = myScores.find((s) => s.quiz.id === quiz.id);
-                
-                return (
-                  <div key={quiz.id} className="card relative">
-                    {completed && (
-                      <div className="absolute top-4 right-4">
-                        <span className="bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded">
-                          ✓ Complété
-                        </span>
-                      </div>
-                    )}
-                    
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            {myQuizzes.length === 0 ? (
+              <div className="text-center py-16">
+                <p className="text-gray-600 text-lg mb-2">Aucun quiz créé</p>
+                <p className="text-gray-500 mb-6">Créez votre premier quiz personnalisé</p>
+                <Link
+                  href="/quiz/create"
+                  className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
+                >
+                  Créer un quiz
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {myQuizzes.map((quiz) => (
+                  <div
+                    key={quiz.id}
+                    className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200 hover:border-blue-400 hover:shadow-xl transition-all"
+                  >
+                    <h3 className="text-xl font-bold text-gray-900 mb-3">
                       {quiz.title}
                     </h3>
-                    <p className="text-gray-600 mb-4 line-clamp-2">
+                    <p className="text-gray-600 mb-4 text-sm line-clamp-2">
                       {quiz.description || 'Aucune description'}
                     </p>
-                    <div className="flex items-center text-sm text-gray-500 mb-4">
-                      <span>📝 {quiz._count.questions} questions</span>
-                      {completed && (
-                        <span className="ml-4">🏆 {completed.totalScore} pts</span>
-                      )}
-                    </div>
-                    <Link
-                      href={`/quiz/${quiz.id}`}
-                      className="btn-primary w-full text-center"
-                    >
-                      {completed ? 'Rejouer' : 'Jouer'}
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
-        {/* My Scores Section */}
-        {myScores.length > 0 && (
-          <div className="mt-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Mes derniers scores</h2>
-            <div className="card overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Quiz
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Score
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {myScores.map((score, index) => (
-                    <tr key={index}>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {score.quiz.title}
+                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
+                      <span className="flex items-center gap-1">
+                        📝 {quiz._count.questions} questions
+                      </span>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Link
+                        href={`/quiz/${quiz.id}/edit`}
+                        className="flex-1 text-center py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
+                      >
+                        Modifier
+                      </Link>
+                      <button
+                        onClick={() => handleDeleteQuiz(quiz.id)}
+                        className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Content: Mes Scores */}
+        {activeTab === 'scores' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Mes scores</h2>
+
+            {myScores.length === 0 ? (
+              <div className="text-center py-16">
+                <p className="text-gray-600 text-lg mb-2">Aucun score enregistré</p>
+                <p className="text-gray-500">Complétez des quiz pour voir vos scores ici</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {myScores.map((score, index) => (
+                  <div
+                    key={index}
+                    className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200 hover:border-blue-400 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+                  >
+                    <div className="flex-1">
+                      <h4 className="text-lg font-bold text-gray-900 mb-1">
+                        {score.quiz.title}
+                      </h4>
+                      <p className="text-sm text-gray-500">
+                        Complété le {new Date(score.completedAt).toLocaleDateString('fr-FR', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <div className="text-3xl font-bold text-blue-600">
+                          {score.totalScore}
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-bold text-primary-600">
-                          {score.totalScore} pts
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-500">
-                          {new Date(score.completedAt).toLocaleDateString('fr-FR')}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Link
-                          href={`/quiz/${score.quiz.id}`}
-                          className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                        >
-                          Rejouer →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}   
-                </tbody>
-              </table>
-            </div>
+                        <div className="text-xs text-gray-500">points</div>
+                      </div>
+
+                      <Link
+                        href={`/quiz/${score.quiz.id}`}
+                        className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg whitespace-nowrap"
+                      >
+                        Rejouer →
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

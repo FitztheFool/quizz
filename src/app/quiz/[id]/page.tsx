@@ -24,7 +24,7 @@ interface Quiz {
   id: string;
   title: string;
   description: string;
-  createdBy: {
+  creator: {
     id: string;
     name: string;
   };
@@ -322,7 +322,7 @@ export default function QuizPage() {
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">{quiz.title}</h1>
           <p className="text-gray-600 mb-4">{quiz.description}</p>
-          <p className="text-sm text-gray-500">Par {quiz.createdBy.name}</p>
+          <p className="text-sm text-gray-500">Par {quiz.creator.name}</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
