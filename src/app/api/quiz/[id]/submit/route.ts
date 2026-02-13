@@ -35,7 +35,7 @@ function answerLabel(a: any) {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -44,7 +44,7 @@ export async function POST(
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
 
-    const quizId = params.id;
+    const { id: quizId } = await params;
     const body = await request.json();
     const answers = (body?.answers ?? []) as UserAnswer[];
 
